@@ -16,6 +16,8 @@ This repo is the runtime for an agent that owns those loops: that screens **ever
 discharge for them, that cannot drop one it does not recognise, and that knows
 when **not** to act.
 
+**Live demo: https://annhuii.github.io/interstitium-demo/**
+
 ```
 pip install -e ".[dev]"
 python -m interstitium --registry   # route signals across every workflow
@@ -252,7 +254,7 @@ src/interstitium/
   engine.py      the culture loop's narrated trace (what the demo UI renders)
   scenarios.py   the demo encounter, as data
 tests/           105 tests; registry-wide invariants in test_registry_invariants.py
-demo/index.html  the pitch UI
+docs/index.html  the pitch UI (served at the Pages link above)
 ```
 
 ## Scope
