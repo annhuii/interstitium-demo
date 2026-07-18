@@ -12,9 +12,71 @@ importantly, that knows when **not** to act on it.
 
 ```
 pip install -e ".[dev]"
-python -m interstitium          # run all three cases
-pytest                          # 39 tests
+python -m interstitium --registry   # route signals across all five workflows
+python -m interstitium              # the urine-culture loop in detail
+pytest                              # 79 tests
 ```
+
+## Five workflows, one runtime
+
+A post-discharge loop is not one shape. These are three:
+
+| trigger | workflow | what makes it different |
+|---|---|---|
+| discharge event | `discharge_open_loop_screen` | screens *every* discharge — decides whether any loop exists at all |
+| discharge event | `high_risk_ama` | clock runs in **hours**; escalation target may be EMS, not a chat message |
+| result event | `pending_culture_empiric_therapy` | the reference case, fully worked out |
+| result event | `radiology_report_changed` | triggered by a **diff** between reads, not a value; closed clinician-to-clinician |
+| elapsed time | `post_discharge_symptom_check` | no external event at all — just "is the trajectory what we expected" |
+
+A workflow declares three things: when it fires, what it must know before it may
+act, and how it decides. Everything else is enforced by `runtime.py` for all of
+them — which is the entire point. **Adding a sixth workflow means adding it to
+`REGISTRY`, and it inherits the safety properties rather than reimplementing
+them.**
+
+```python
+class Workflow(ABC):
+    def triggered_by(self, encounter, signal) -> bool
+    def required_facts(self) -> Tuple[str, ...]      # gate on these
+    def decide(self, ctx) -> Decision
+    def escalation_summary(self, ctx) -> str         # goes through the PHI scan
+```
+
+The guards can only ever move a decision *away* from autonomous action. No guard
+upgrades one, so no combination of them can invent permission the workflow did
+not propose:
+
+- an autonomous action is impossible while any required fact is unknown
+- a workflow needing the patient cannot act without a **verified** contact point
+- a workflow that cannot establish its facts inside its window **hands off**
+  rather than waiting
+
+That last one is a liveness property, and it is the one worth pointing at:
+`MONITOR` and `GATHER_FACTS` are always safe to return, so a loop could sit in
+either forever and never surface. The gather window is what stops "safe" from
+becoming "silent".
+
+```
+$ python -m interstitium --registry
+
+--- AMI patient left AMA -> two owners, immediate
+    high_risk_ama       gather_facts         urgent outbound call: symptoms + willingness to return
+
+--- AMI AMA, unreachable for 3h -> hands off rather than waiting
+    high_risk_ama       escalate_clinician   handing off: gather window elapsed
+```
+
+The tests in `test_registry_invariants.py` are parametrised over `REGISTRY`, so
+those properties are asserted for every workflow — including ones not written
+yet. One of them drops each required fact in turn and asserts that
+complete-minus-one is never treated as complete.
+
+**Honest scope:** only the urine-culture workflow has real clinical depth
+(`policy.py`, `formulary.py`). The other four are thin — enough to prove the
+interface holds under genuinely different shapes, not enough to run. That is
+deliberate: five half-built workflows would prove less than two real ones and an
+architecture that takes the rest.
 
 ## The workflow this changes
 
@@ -75,7 +137,7 @@ deliberate: it is how a clinician who saw thirty patients that shift actually
 re-recognises this one, and it identifies her to *him* without identifying her to
 anyone else. The actual PHI lives behind the authenticated link.
 
-## Three bugs the tests caught
+## Five bugs the tests caught
 
 Worth recording, because each one is the kind that survives a demo:
 
@@ -95,18 +157,31 @@ Worth recording, because each one is the kind that survives a demo:
    fever + flank pain"* when nobody had reached her. Absence of information is
    now stated as absence of information.
 
+4. **A loop could monitor forever.** `MONITOR` is always permitted, so the
+   symptom workflow could return it indefinitely: never acting, never escalating,
+   never surfacing. Safe on every individual call and a silent failure over time.
+   The gather-window check now runs *before* the always-permitted shortcut.
+
+5. **Unknown treated as a value, three times over.** Two unretrieved radiology
+   reads compared equal and proposed closing the loop; an unasked AMA patient was
+   described to a clinician as having "declined to return"; an unanswered symptom
+   check reported "symptoms persist". The runtime blocked the unsafe *actions*,
+   but the workflows should not have proposed them or described them that way.
+
 ## Layout
 
 ```
 src/interstitium/
+  runtime.py     Workflow protocol, the guards, routing -- the general layer
+  workflows/     the five: intake, ama, culture, radiology, symptoms
   models.py      encounter objects; SymptomScreen defaults to worst case
   formulary.py   agent site-eligibility, local antibiogram, pharmacy stock
-  policy.py      the gates: switch therapy, or escalate
+  policy.py      UTI clinical gates: switch therapy, or escalate
   phi.py         escalation message builder + identifier scan
-  engine.py      runs the loop, emits the event trace
+  engine.py      the culture loop's narrated trace (what the demo UI renders)
   scenarios.py   the demo encounter, as data
-tests/           39 tests, the safety properties first
-demo/index.html  the pitch UI — a view onto this engine
+tests/           79 tests; registry-wide invariants in test_registry_invariants.py
+demo/index.html  the pitch UI
 ```
 
 ## Scope

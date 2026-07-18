@@ -100,7 +100,7 @@ def run(
     for reason in decision.reasons:
         log(EventKind.REASONING, reason)
 
-    if decision.disposition is policy.Disposition.NO_ACTION:
+    if decision.disposition is policy.TherapyAction.NO_ACTION:
         item.resolve("Empiric therapy adequate on final susceptibilities.")
         log(EventKind.ACTION, "No therapy change required. Follow-up item resolved.")
         return out

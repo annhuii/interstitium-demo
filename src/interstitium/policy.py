@@ -14,7 +14,7 @@ from . import formulary
 from .models import CultureResult, Interp, Patient, Route, Site, SymptomScreen
 
 
-class Disposition(str, Enum):
+class TherapyAction(str, Enum):
     NO_ACTION = "no_action"
     SWITCH_THERAPY = "switch_therapy"
     ESCALATE = "escalate"
@@ -22,7 +22,7 @@ class Disposition(str, Enum):
 
 @dataclass
 class Decision:
-    disposition: Disposition
+    disposition: TherapyAction
     reasons: List[str] = field(default_factory=list)
     agent: Optional[str] = None
     dosing: Optional[str] = None
@@ -31,11 +31,11 @@ class Decision:
 
     @property
     def prescribes(self) -> bool:
-        return self.disposition is Disposition.SWITCH_THERAPY
+        return self.disposition is TherapyAction.SWITCH_THERAPY
 
     @property
     def escalates(self) -> bool:
-        return self.disposition is Disposition.ESCALATE
+        return self.disposition is TherapyAction.ESCALATE
 
 
 def therapy_is_effective(culture: CultureResult, current_agent: str) -> bool:
@@ -89,7 +89,7 @@ def decide(
 
     if therapy_is_effective(culture, current_agent):
         return Decision(
-            Disposition.NO_ACTION,
+            TherapyAction.NO_ACTION,
             ["{} remains susceptible; current therapy is adequate".format(current_agent)],
         )
 
@@ -107,7 +107,7 @@ def decide(
     # Gate 1 -- an unanswered screen cannot clear a patient.
     if not screen.answered:
         reasons.append("safety screen not completed; cannot exclude systemic involvement")
-        return Decision(Disposition.ESCALATE, reasons)
+        return Decision(TherapyAction.ESCALATE, reasons)
 
     # Gate 2 -- systemic or upper-tract features are not an oral-swap situation.
     if screen.has_red_flags:
@@ -117,13 +117,13 @@ def decide(
             )
         )
         reasons.append("oral urinary-concentrating agents would undertreat; physician assessment required")
-        return Decision(Disposition.ESCALATE, reasons)
+        return Decision(TherapyAction.ESCALATE, reasons)
 
     # Gate 3 -- allergies must be reconfirmed with the patient, not read from chart alone.
     allergies = screen.allergies_reconfirmed
     if allergies is None:
         reasons.append("drug allergies not reconfirmed with patient at time of prescribing")
-        return Decision(Disposition.ESCALATE, reasons)
+        return Decision(TherapyAction.ESCALATE, reasons)
 
     site = screen.suspected_site
     candidates = oral_candidates(culture, site, allergies)
@@ -131,7 +131,7 @@ def decide(
     # Gate 4 -- no acceptable oral agent means a human decides, not a fallback.
     if not candidates:
         reasons.append("no susceptible, stocked, site-appropriate oral agent available")
-        return Decision(Disposition.ESCALATE, reasons, considered=candidates)
+        return Decision(TherapyAction.ESCALATE, reasons, considered=candidates)
 
     chosen = candidates[0]
     reasons.append(
@@ -143,7 +143,7 @@ def decide(
         )
     )
     return Decision(
-        Disposition.SWITCH_THERAPY,
+        TherapyAction.SWITCH_THERAPY,
         reasons,
         agent=chosen,
         dosing=formulary.profile(chosen).dosing,

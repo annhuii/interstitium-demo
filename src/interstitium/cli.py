@@ -38,8 +38,19 @@ def run_case(name: str) -> engine.LoopResult:
 
 def main() -> None:
     ap = argparse.ArgumentParser(description="Interstitium follow-up loop")
-    ap.add_argument("--case", choices=sorted(CASES), help="run a single case")
+    ap.add_argument("--case", choices=sorted(CASES), help="run a single culture case")
+    ap.add_argument(
+        "--registry",
+        action="store_true",
+        help="route signals across all registered workflows",
+    )
     args = ap.parse_args()
+
+    if args.registry:
+        from .demo_registry import main as registry_main
+
+        registry_main()
+        return
 
     for name in ([args.case] if args.case else sorted(CASES)):
         run_case(name)

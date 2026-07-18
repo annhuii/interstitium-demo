@@ -4,7 +4,7 @@ from dataclasses import replace
 
 from interstitium import engine, scenarios
 from interstitium.models import Contact, Status
-from interstitium.policy import Disposition
+from interstitium.policy import TherapyAction
 
 
 def run(screen, patient=None):
@@ -18,7 +18,7 @@ def run(screen, patient=None):
 
 def test_clear_screen_closes_the_loop():
     r = run(scenarios.SCREEN_CLEAR)
-    assert r.decision.disposition is Disposition.SWITCH_THERAPY
+    assert r.decision.disposition is TherapyAction.SWITCH_THERAPY
     assert r.item.status is Status.RESOLVED
     assert r.item.escalated is False
     assert r.page is None
@@ -27,7 +27,7 @@ def test_clear_screen_closes_the_loop():
 
 def test_red_flag_escalates_and_pages_without_prescribing():
     r = run(scenarios.SCREEN_RED_FLAG)
-    assert r.decision.disposition is Disposition.ESCALATE
+    assert r.decision.disposition is TherapyAction.ESCALATE
     assert r.item.status is Status.ESCALATED
     assert r.item.physician_notified is True
     assert r.page is not None
