@@ -1,0 +1,908 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Interstitium — ED follow-up demo</title>
+<style>
+  :root{
+    --bg:#eef2f6;
+    --panel:#ffffff;
+    --line:#d3dbe4;
+    --line-soft:#e6ebf1;
+    --ink:#1c2733;
+    --ink-2:#53616f;
+    --ink-3:#8494a3;
+    --accent:#1d4ed8;
+    --accent-soft:#e8eefc;
+    --warn:#b45309;
+    --warn-soft:#fdf3e3;
+    --danger:#b91c1c;
+    --danger-soft:#fdecec;
+    --ok:#15803d;
+    --ok-soft:#e9f5ee;
+    --console:#101a26;
+    --console-2:#18242f;
+    --console-line:#26333f;
+    --mono:ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,monospace;
+    --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  }
+  *{box-sizing:border-box}
+  html,body{height:100%}
+  body{
+    margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);
+    font-size:13px;line-height:1.45;display:flex;flex-direction:column;overflow:hidden;
+  }
+
+  /* ---------- top bar ---------- */
+  .topbar{
+    flex:0 0 auto;display:flex;align-items:center;gap:16px;
+    padding:0 16px;height:50px;background:var(--panel);
+    border-bottom:1px solid var(--line);
+  }
+  .brand{font-size:15px;font-weight:650;letter-spacing:-.2px}
+  .brand span{color:var(--ink-3);font-weight:450;font-size:11px;margin-left:8px;letter-spacing:.06em;text-transform:uppercase}
+  .topbar .spacer{flex:1}
+  button{font-family:inherit;font-size:12px;cursor:pointer}
+  .btn{
+    border:1px solid var(--line);background:#fff;color:var(--ink);
+    padding:6px 13px;border-radius:5px;font-weight:550;
+  }
+  .btn:hover{background:#f6f8fa}
+  .btn:disabled{opacity:.4;cursor:default}
+  .btn.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+  .btn.primary:hover{background:#1a44bd}
+  .toggle{display:flex;align-items:center;gap:8px;color:var(--ink-2);font-size:12px;user-select:none;cursor:pointer}
+  .switch{
+    width:34px;height:19px;border-radius:11px;background:#c3ccd6;position:relative;
+    transition:background .18s;flex:0 0 auto;
+  }
+  .switch::after{
+    content:"";position:absolute;top:2px;left:2px;width:15px;height:15px;border-radius:50%;
+    background:#fff;transition:transform .18s;box-shadow:0 1px 2px rgba(0,0,0,.25);
+  }
+  .toggle.on .switch{background:var(--danger)}
+  .toggle.on .switch::after{transform:translateX(15px)}
+  .toggle.on{color:var(--danger);font-weight:550}
+
+  /* ---------- layout ---------- */
+  .main{flex:1;display:flex;min-height:0}
+  .pane{display:flex;flex-direction:column;min-height:0}
+  .ehr{flex:0 0 55%;border-right:1px solid var(--line);background:var(--bg)}
+  .console{flex:1;background:var(--console)}
+  .pane-head{
+    flex:0 0 auto;padding:8px 16px;font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;
+    color:var(--ink-3);border-bottom:1px solid var(--line);background:var(--panel);font-weight:600;
+  }
+  .console .pane-head{background:var(--console-2);border-color:var(--console-line);color:#7d8fa1;
+    display:flex;align-items:center;gap:8px}
+  .dot{width:6px;height:6px;border-radius:50%;background:#3fb27f;box-shadow:0 0 0 3px rgba(63,178,127,.15)}
+  .scroll{flex:1;overflow-y:auto;padding:14px 16px 24px}
+  .scroll::-webkit-scrollbar{width:9px}
+  .scroll::-webkit-scrollbar-thumb{background:#c3ccd6;border-radius:5px;border:2px solid var(--bg)}
+  .console .scroll::-webkit-scrollbar-thumb{background:#31404e;border-color:var(--console)}
+
+  /* ---------- patient banner ---------- */
+  .banner{
+    flex:0 0 auto;background:var(--panel);border-bottom:1px solid var(--line);padding:10px 16px;
+  }
+  .banner-top{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap}
+  .pt-name{font-size:16px;font-weight:650;letter-spacing:-.2px}
+  .pt-demo{font-family:var(--mono);font-size:11.5px;color:var(--ink-2)}
+  .banner-tags{display:flex;gap:6px;margin-top:7px;flex-wrap:wrap}
+  .tag{
+    font-size:10.5px;padding:2.5px 7px;border-radius:3px;border:1px solid var(--line);
+    color:var(--ink-2);background:#f7f9fb;font-weight:550;
+  }
+  .tag.ok{color:var(--ok);background:var(--ok-soft);border-color:#c3e2ce}
+  .tag.flag{color:var(--warn);background:var(--warn-soft);border-color:#ecd5ab}
+
+  /* ---------- EHR cards ---------- */
+  .card{
+    background:var(--panel);border:1px solid var(--line);border-radius:6px;
+    margin-bottom:10px;overflow:hidden;animation:rise .32s ease both;
+  }
+  @keyframes rise{from{opacity:0;transform:translateY(7px)}to{opacity:1;transform:none}}
+  .card-head{
+    padding:7px 12px;border-bottom:1px solid var(--line-soft);background:#f8fafc;
+    font-size:10.5px;letter-spacing:.09em;text-transform:uppercase;color:var(--ink-2);font-weight:650;
+    display:flex;justify-content:space-between;align-items:center;gap:8px;
+  }
+  .card-head .stamp{font-family:var(--mono);letter-spacing:0;text-transform:none;color:var(--ink-3);font-weight:450}
+  .card-body{padding:11px 12px}
+  .kv{display:grid;grid-template-columns:128px 1fr;gap:3px 10px}
+  .kv dt{color:var(--ink-3);font-size:11.5px}
+  .kv dd{margin:0;font-size:12.5px}
+  .mono{font-family:var(--mono);font-size:12px}
+  pre.mono{margin:0;white-space:pre-wrap;line-height:1.55;font-size:11.5px}
+  .transcript-line{margin:0 0 4px;font-family:var(--mono);font-size:11.5px;line-height:1.5;animation:rise .25s ease both}
+  .spk{color:var(--accent);font-weight:600}
+  .spk.pt{color:#7a5cc4}
+  .callout{
+    margin-top:9px;padding:8px 10px;border-left:2px solid var(--warn);background:var(--warn-soft);
+    color:#7c4a10;font-size:11.5px;border-radius:0 4px 4px 0;
+  }
+  .callout.info{border-color:var(--accent);background:var(--accent-soft);color:#1b3a8c}
+  .pos{color:var(--danger);font-weight:650}
+  .res-R{color:var(--danger);font-weight:650}
+  .res-S{color:var(--ok);font-weight:650}
+  .res-I{color:var(--warn);font-weight:650}
+  .cur{background:#fdecec;color:var(--danger);font-weight:650;padding:0 3px;border-radius:2px}
+  .owner-btns{display:flex;gap:7px;margin-top:9px}
+  .owner-btn{
+    border:1px solid var(--line);background:#fff;border-radius:5px;padding:6px 14px;
+    font-weight:600;color:var(--ink-2);transition:all .2s;
+  }
+  .owner-btn.picked{background:var(--accent);border-color:var(--accent);color:#fff;box-shadow:0 0 0 3px var(--accent-soft)}
+  .owner-btn.hint{border-style:dashed}
+
+  /* ---------- narration caption ---------- */
+  .caption{
+    position:relative;margin:0 0 10px;padding:9px 12px 9px 14px;border-radius:6px;
+    background:#1c2733;color:#e6edf4;font-size:12.5px;font-style:italic;line-height:1.45;
+    animation:rise .3s ease both;
+  }
+  .caption::before{
+    content:"NARRATION";position:absolute;top:-7px;left:12px;background:#1c2733;color:#8fa3b5;
+    font-size:8.5px;letter-spacing:.14em;padding:0 5px;font-style:normal;font-weight:700;border-radius:2px;
+  }
+
+  /* ---------- follow-up tracker ---------- */
+  .tracker{
+    flex:0 0 auto;background:var(--console-2);border-bottom:1px solid var(--console-line);
+    padding:9px 14px;font-family:var(--mono);font-size:11px;color:#9db0c2;
+  }
+  .tracker-row{display:flex;justify-content:space-between;gap:10px;padding:1.5px 0}
+  .tracker-row b{color:#c9d8e5;font-weight:500}
+  .st{padding:1px 7px;border-radius:3px;font-weight:600;font-size:10px;letter-spacing:.05em}
+  .st.open{background:#2a3a26;color:#a8d98a}
+  .st.active{background:#3a3320;color:#e5c46b}
+  .st.resolved{background:#1e3a2c;color:#63d19a}
+  .st.escalated{background:#3d2020;color:#f08a8a}
+
+  /* ---------- console entries ---------- */
+  .entry{
+    display:grid;grid-template-columns:52px 92px 1fr;gap:10px;padding:7px 0;
+    border-bottom:1px solid rgba(255,255,255,.045);animation:rise .28s ease both;
+  }
+  .entry .ts{font-family:var(--mono);font-size:10.5px;color:#5f7183;padding-top:2px}
+  .kind{
+    font-size:9px;letter-spacing:.1em;font-weight:700;padding:2.5px 0 0;text-align:left;
+  }
+  .k-REASONING{color:#7fb0f5}
+  .k-ACTION{color:#5ecfa0}
+  .k-CALL{color:#e8bf62}
+  .k-ESCALATION{color:#f28b8b}
+  .k-SYSTEM{color:#7d8fa1}
+  .entry .msg{color:#d6e2ed;font-size:12.5px;line-height:1.5}
+  .entry .msg b{color:#fff;font-weight:600}
+  .entry .msg .neg{color:#f28b8b;font-weight:600}
+  .entry .msg .pos{color:#5ecfa0;font-weight:600}
+  .cursor{display:inline-block;width:6px;height:13px;background:#7fb0f5;vertical-align:-2px;animation:blink .9s steps(1) infinite}
+  @keyframes blink{50%{opacity:0}}
+
+  .cbox{
+    margin-top:6px;border:1px solid var(--console-line);border-radius:5px;background:#0a121b;
+    padding:9px 11px;font-family:var(--mono);font-size:11px;color:#a9bccd;line-height:1.55;white-space:pre-wrap;
+  }
+  .cbox .hd{color:#7d8fa1;font-size:9.5px;letter-spacing:.12em;margin-bottom:5px;display:block}
+  .qa{margin:3px 0;color:#c9d8e5}
+  .qa .a{color:#fff}
+  .flagok{color:#5ecfa0;font-weight:600}
+  .flagbad{color:#f28b8b;font-weight:600}
+
+  /* mock Teams card */
+  .teams{
+    margin-top:7px;border:1px solid #3a4a5c;border-radius:7px;background:#f4f6fb;color:#1c2733;
+    overflow:hidden;font-family:var(--sans);
+  }
+  .teams-hd{
+    background:#4b53bc;color:#fff;padding:6px 11px;font-size:11px;font-weight:600;
+    display:flex;align-items:center;gap:7px;
+  }
+  .teams-hd .ch{opacity:.75;font-weight:400}
+  .teams-body{padding:10px 11px;font-size:12px;line-height:1.5;color:var(--ink)}
+  .entry .msg .teams-body b{color:var(--danger);font-weight:650}
+  .teams-from{font-weight:650;font-size:11.5px;margin-bottom:4px}
+  .teams-from span{color:var(--ink-3);font-weight:400;font-family:var(--mono);font-size:10.5px;margin-left:6px}
+  .teams-link{
+    display:inline-block;margin-top:8px;padding:5px 11px;background:var(--accent);color:#fff;
+    border-radius:4px;font-size:11.5px;font-weight:600;text-decoration:none;cursor:pointer;
+    border:none;font-family:inherit;transition:background .15s;
+  }
+  .teams-link:hover{background:#1a44bd}
+  .teams-link.tapped{background:#0f3aa8;box-shadow:0 0 0 3px rgba(29,78,216,.28)}
+
+  /* ---------- mock authenticated EHR (secure link target) ---------- */
+  .veil{
+    position:fixed;inset:0;background:rgba(12,20,28,.55);backdrop-filter:blur(2px);
+    display:flex;align-items:center;justify-content:center;z-index:50;padding:28px;
+    animation:fade .2s ease both;
+  }
+  @keyframes fade{from{opacity:0}to{opacity:1}}
+  .secure{
+    width:min(660px,100%);max-height:100%;overflow-y:auto;background:var(--panel);
+    border-radius:9px;box-shadow:0 22px 60px rgba(0,0,0,.4);animation:rise .28s ease both;
+  }
+  .secure-auth{
+    background:#0f3a24;color:#a8e6c1;padding:8px 15px;font-family:var(--mono);font-size:11px;
+    border-radius:9px 9px 0 0;display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;
+  }
+  .secure-hd{padding:13px 15px 11px;border-bottom:1px solid var(--line)}
+  .secure-hd .t{font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-3);font-weight:650}
+  .secure-hd .n{font-size:17px;font-weight:650;letter-spacing:-.2px;margin-top:3px}
+  .secure-hd .d{font-family:var(--mono);font-size:11.5px;color:var(--ink-2);margin-top:2px}
+  .reveal{
+    margin-top:8px;padding:7px 10px;background:var(--ok-soft);border-left:2px solid var(--ok);
+    color:#16653c;font-size:11px;border-radius:0 4px 4px 0;
+  }
+  .secure-body{padding:13px 15px}
+  .secure-sec{margin-bottom:12px}
+  .secure-sec h4{
+    margin:0 0 5px;font-size:10.5px;letter-spacing:.09em;text-transform:uppercase;color:var(--ink-3);font-weight:650;
+  }
+  .secure-foot{
+    padding:11px 15px;border-top:1px solid var(--line);background:#f8fafc;
+    display:flex;align-items:center;gap:9px;flex-wrap:wrap;border-radius:0 0 9px 9px;
+  }
+  .secure-foot .sp{flex:1}
+  .teams-cap{
+    padding:8px 11px;border-top:1px solid #dde3ec;background:#fafbfe;color:#53616f;
+    font-size:11px;font-style:italic;line-height:1.45;
+  }
+
+  /* ---------- timeline rail ---------- */
+  .rail{
+    flex:0 0 auto;display:flex;align-items:center;gap:0;background:var(--panel);
+    border-top:1px solid var(--line);padding:0 16px;height:52px;
+  }
+  .stage{flex:1;display:flex;flex-direction:column;gap:5px;position:relative;padding:0 4px}
+  .stage .bar{height:3px;border-radius:2px;background:#dde3ea;transition:background .3s}
+  .stage .lbl{font-size:10px;color:var(--ink-3);letter-spacing:.02em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .stage .num{font-family:var(--mono);font-size:9px;color:#b3bfca;margin-right:4px}
+  .stage.done .bar{background:#9fb4cb}
+  .stage.done .lbl{color:var(--ink-2)}
+  .stage.now .bar{background:var(--accent)}
+  .stage.now .lbl{color:var(--accent);font-weight:650}
+  .stage.esc.now .bar{background:var(--danger)}
+  .stage.esc.now .lbl{color:var(--danger)}
+  .stage.skipped .lbl{color:#c3ccd6;text-decoration:line-through}
+
+  /* ---------- footer ---------- */
+  .footer{
+    flex:0 0 auto;background:#e3e9ef;border-top:1px solid var(--line);
+    padding:5px 16px;font-size:10.5px;color:var(--ink-3);display:flex;justify-content:space-between;gap:12px;
+  }
+  .footer .r{font-family:var(--mono)}
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="brand" id="brandName"></div>
+  <div class="spacer"></div>
+  <div class="toggle" id="redFlagToggle" title="Restarts the demo on the escalation branch">
+    <div class="switch"></div><span>Simulate red flag</span>
+  </div>
+  <button class="btn" id="btnReset">Reset</button>
+  <button class="btn" id="btnNext">Next</button>
+  <button class="btn primary" id="btnPlay">Play demo</button>
+</div>
+
+<div class="main">
+  <!-- ============ EHR ============ -->
+  <div class="pane ehr">
+    <div class="banner">
+      <div class="banner-top">
+        <div class="pt-name" id="ptName"></div>
+        <div class="pt-demo" id="ptDemo"></div>
+      </div>
+      <div class="banner-tags" id="ptTags"></div>
+    </div>
+    <div class="pane-head">Encounter — Emergency Department</div>
+    <div class="scroll" id="ehrScroll"></div>
+  </div>
+
+  <!-- ============ AGENT CONSOLE ============ -->
+  <div class="pane console">
+    <div class="pane-head"><span class="dot"></span> Agent console — follow-up owner</div>
+    <div class="tracker" id="tracker"></div>
+    <div class="scroll" id="consoleScroll"></div>
+  </div>
+</div>
+
+<div class="rail" id="rail"></div>
+
+<div class="footer">
+  <span>Demo — synthetic patient, no real PHI. Not a medical device.</span>
+  <span class="r" id="footRight"></span>
+</div>
+
+<script>
+/* =====================================================================
+   TOP-OF-FILE CONSTANTS — tweak these before the pitch
+   ===================================================================== */
+
+const APP_NAME = "Interstitium";
+
+const PATIENT = {
+  name: "Danielle Tan",
+  mrn: "4471029",
+  dob: "1979-03-14",
+  age: 47,
+  sex: "F",
+  allergies: "No known drug allergies",
+  phone: "(415) 555-0148",
+  language: "English",
+  occupation: "High-school music teacher; plays in a jazz trio on weekends",
+  pcp: null
+};
+
+const STAGES = [
+  { id:0, label:"Triage" },
+  { id:1, label:"Encounter" },
+  { id:2, label:"Orders & discharge" },
+  { id:3, label:"Culture results" },
+  { id:4, label:"Agent calls patient" },
+  { id:5, label:"Loop closed" },
+  { id:6, label:"Physician escalation", esc:true }
+];
+
+/* Follow-up item data model (agent's unit of work) */
+const FOLLOW_UP_TEMPLATE = {
+  category: "pending_culture_empiric_therapy",
+  instructions: "Own the urine culture result. On resistance to empiric therapy, screen for upper-tract/systemic features, then switch to a susceptible oral agent or escalate.",
+  action_if_positive: "Safety screen -> if clear, re-prescribe by susceptibility; if red flags, halt and page treating physician.",
+  action_if_negative: "Confirm symptom resolution, close loop.",
+  status: "open",
+  outcome: null,
+  physician_notified: false,
+  escalated: false
+};
+
+/* =====================================================================
+   SCRIPT — every step is {stage, t, run}
+   ===================================================================== */
+
+function buildScript(redFlag){
+  const S = [];
+  const push = (stage, t, run) => S.push({stage, t, run});
+
+  /* ---------------- STAGE 0 — TRIAGE ---------------- */
+  push(0,"14:01", () => caption("Getting the contact right is step zero — you can't close a loop you can't reach."));
+  push(0,"14:01", () => ehrCard("Triage note — RN", "14:01", `
+    <dl class="kv">
+      <dt>Chief complaint</dt><dd>"Lower abdominal pain and burning when urinating, 2 days"</dd>
+      <dt>Triage acuity</dt><dd>ESI 3</dd>
+    </dl>`));
+  push(0,"14:01", () => ehrCard("Vital signs", "14:01",
+    `<pre class="mono">T  37.4 &deg;C      HR  88        BP  128/79
+RR 16           SpO2 99% RA</pre>`));
+  push(0,"14:02", () => agent("ACTION","Contact verification: sending silent test SMS to number on file."));
+  push(0,"14:02", () => ehrCard("Contact verification", "14:02", `
+    <div class="mono"><span class="res-S">&check;</span> Test SMS delivered to ${PATIENT.phone} at 14:02 — number confirmed reachable.</div>
+    <div class="callout info">For patients experiencing homelessness, this step confirms a reachable number or a shelter/clinic callback point instead of a static address.</div>`));
+  push(0,"14:02", () => agent("SYSTEM","Reachable contact confirmed. Encounter registered for follow-up screening."));
+
+  /* ---------------- STAGE 1 — ENCOUNTER ---------------- */
+  push(1,"14:20", () => ehrCard("Ambient scribe — live transcript", "14:20",
+    `<div id="txBox"></div>`, "txCard"));
+  const tx = [
+    ["Dr. Lim","So it burns when you go, and some pain low down — any fever, back pain, nausea?"],
+    ["Patient","No fever really. No back pain. It's just annoying, burns a lot."],
+    ["Dr. Lim","Any chance of pregnancy — no, okay. First time you've had this?"],
+    ["Patient","Yeah first time. I teach music, I'm on my feet all day, didn't want to ignore it."],
+    ["Dr. Lim","We'll check your urine, start you on an antibiotic today. I'll send a culture to be safe."]
+  ];
+  tx.forEach(([who,line]) => push(1,"14:20", () => transcriptLine(who,line)));
+  push(1,"14:26", () => ehrCard("Scribe-generated note (structured)", "14:26", `
+    <dl class="kv">
+      <dt>HPI</dt><dd>47F, 2 days dysuria and suprapubic discomfort. No fever, no flank pain, no nausea/vomiting. No prior UTI. Not pregnant.</dd>
+      <dt>Exam</dt><dd>Afebrile, well-appearing. Mild suprapubic tenderness. <b>No CVA tenderness.</b></dd>
+      <dt>Assessment</dt><dd>Acute uncomplicated cystitis, first episode.</dd>
+      <dt>Plan</dt><dd>Urine dipstick, empiric oral antibiotic, urine culture, discharge with return precautions.</dd>
+    </dl>`));
+  push(1,"14:26", () => agent("REASONING","<b>Follow-up candidate detected:</b> empiric abx + culture sent, no PCP on file, first presentation."));
+
+  /* ---------------- STAGE 2 — ORDERS & DISCHARGE ---------------- */
+  push(2,"14:40", () => ehrCard("Urinalysis — dipstick", "14:40",
+    `<pre class="mono">Leukocyte esterase ....... <span class="pos">POSITIVE</span>
+Nitrites ................. <span class="pos">POSITIVE</span>
+Blood .................... <span class="res-I">trace</span></pre>`));
+  push(2,"14:44", () => ehrCard("Medication order", "14:44",
+    `<div class="mono"><b>Ciprofloxacin 500 mg PO BID &times; 7 days</b> — empiric, dispensed at discharge.</div>`));
+  push(2,"14:45", () => ehrCard("Microbiology order", "14:45",
+    `<div class="mono">Urine culture, clean catch — <b>SENT</b> (collected 14:40)</div>
+     <div class="callout">Culture sent despite discharge. Normally discouraged without a follow-up owner — the agent becomes that owner.</div>`));
+  push(2,"15:10", () => caption("The culture only gets sent because someone now owns the result."));
+  push(2,"15:10", () => ehrCard("Disposition", "15:10",
+    `<dl class="kv"><dt>Disposition</dt><dd>Home. Return precautions given.</dd>
+     <dt>Time</dt><dd class="mono">15:10</dd>
+     <dt>PCP</dt><dd><span class="tag flag">None on file</span></dd></dl>`));
+  push(2,"15:11", () => ehrCard("Follow-up ownership — action required", "15:11",
+    `<div>This patient has a <b>pending culture</b> and <b>no PCP</b>. Assign follow-up owner?</div>
+     <div class="owner-btns">
+       <button class="owner-btn" id="ownAgent">Agent</button>
+       <button class="owner-btn" id="ownSelf">Myself</button>
+       <button class="owner-btn hint" id="ownBoth">Both</button>
+     </div>
+     <div class="callout info">Safe default in production is <b>[Both]</b> — the agent works the loop, the physician stays on the thread.</div>`, "ownCard"));
+  push(2,"15:11", () => { pick("ownAgent"); agent("ACTION","Follow-up ownership accepted: <b>Agent</b>. Culture result subscribed; watch armed."); setFU({status:"open"}); });
+
+  /* ---------------- STAGE 3 — CULTURE RETURNS ---------------- */
+  push(3,"+48h", () => agent("SYSTEM","Microbiology result received — 48 h post-discharge. Watch triggered."));
+  push(3,"+48h", () => ehrCard("Microbiology — final report", "2026-07-20 15:02",
+`<pre class="mono">SPECIMEN: Urine, clean catch          COLLECTED: 2026-07-18 14:40
+RESULT:   &gt;100,000 CFU/mL <b>Escherichia coli</b> — <span class="pos">ESBL-positive</span>
+          (extended-spectrum beta-lactamase)
+
+Antibiotic Susceptibilities (S/I/R):
+  Ampicillin ............... <span class="res-R">R</span>
+  Ciprofloxacin ............ <span class="res-R">R</span>   <span class="cur">&lt;-- current empiric therapy</span>
+  Levofloxacin ............. <span class="res-R">R</span>
+  Ceftriaxone .............. <span class="res-R">R</span>
+  Trimethoprim-Sulfa ....... <span class="res-R">R</span>
+  Amoxicillin-Clavulanate .. <span class="res-I">I</span>
+  Nitrofurantoin ........... <span class="res-S">S</span>
+  Fosfomycin ............... <span class="res-S">S</span>
+  Meropenem ................ <span class="res-S">S</span></pre>`));
+  push(3,"+48h", () => caption("The patient is on an antibiotic that doesn't work — and today, nobody would notice."));
+  push(3,"+48h", () => agent("REASONING","Culture resulted. Organism: ESBL <i>E. coli</i>. Current therapy <b>ciprofloxacin — <span class=\"neg\">RESISTANT</span></b>. Patient is on ineffective treatment.", true));
+  push(3,"+48h", () => { setFU({status:"active"});
+    agent("ACTION","Consulting local antibiogram + formulary for oral agents that remain susceptible."); });
+  push(3,"+48h", () => ehrCard("Reference — local antibiogram", "consulted by agent",
+`<pre class="mono">LOCAL ANTIBIOGRAM — E. coli (urinary isolates, community, last 12 mo)
+  Nitrofurantoin ....... <span class="res-S">96%</span> susceptible
+  Fosfomycin ........... <span class="res-S">97%</span> susceptible
+  Ciprofloxacin ........ <span class="res-R">64%</span> susceptible   (rising resistance)
+  TMP-SMX .............. <span class="res-I">76%</span> susceptible
+  Ceftriaxone .......... <span class="res-I">88%</span> susceptible
+
+Formulary oral agents stocked at nearest pharmacy:
+  nitrofurantoin, fosfomycin, TMP-SMX</pre>`));
+  push(3,"+48h", () => agent("REASONING","Cross-referencing antibiogram with isolate: oral options remaining susceptible — <span class=\"pos\">nitrofurantoin (S)</span>, <span class=\"pos\">fosfomycin (S)</span>.", true));
+  push(3,"+48h", () => agent("REASONING","Nitrofurantoin achieves therapeutic levels in urine only — appropriate for <b>lower-tract cystitis only</b>. Must first rule out upper-tract / systemic involvement before selecting an oral agent.", true));
+  push(3,"+48h", () => agent("REASONING","<b>Escalation gate:</b> before changing therapy, verify no red flags (fever, flank pain, rigors, vomiting) &rarr; outbound patient call.", true));
+
+  /* ---------------- STAGE 4 — THE CALL ---------------- */
+  push(4,"15:06", () => caption("A reminder says 'results are in.' An agent rules out sepsis, re-checks allergies, and fixes the prescription."));
+  push(4,"15:06", () => agent("ACTION","Placing outbound call to " + PATIENT.phone + " — verified reachable at triage."));
+  push(4,"15:06", () => callBox());
+  push(4,"15:06", () => callLine("Agent","Hi, this is the follow-up service calling from the emergency department about your visit on Saturday. Am I speaking with the patient? I need to confirm your date of birth."));
+  push(4,"15:06", () => callLine("Patient","Yes — March 14th, 1979."));
+  push(4,"15:07", () => callLine("Agent","Thank you. Your urine culture came back and I need to ask a few quick safety questions first."));
+
+  if(!redFlag){
+    push(4,"15:07", () => callLine("Agent","Any fever or chills since you left?"));
+    push(4,"15:07", () => { callLine("Patient","No."); screen("Fever / chills","No",true); });
+    push(4,"15:07", () => callLine("Agent","Any pain in your back or side — up under the ribs?"));
+    push(4,"15:07", () => { callLine("Patient","No, nothing there."); screen("Flank / back pain","No",true); });
+    push(4,"15:07", () => callLine("Agent","Any nausea or vomiting?"));
+    push(4,"15:07", () => { callLine("Patient","No."); screen("Nausea / vomiting","No",true); });
+    push(4,"15:08", () => callLine("Agent","And the burning and lower pain — better, worse, or the same?"));
+    push(4,"15:08", () => { callLine("Patient","A bit better but still there."); screen("Symptom persistence","Improved, not resolved",null); });
+    push(4,"15:08", () => agent("REASONING","Screen negative for systemic / upper-tract features. Symptoms persist &rarr; keep follow-up item <b>open</b> past prescription change.", true));
+    push(4,"15:08", () => callLine("Agent","The record shows no drug allergies — is that still right? Any reaction to an antibiotic, ever?"));
+    push(4,"15:08", () => { callLine("Patient","No, never had a reaction to anything."); screen("Drug allergies","None — re-verified live",true); });
+    push(4,"15:09", () => agent("ACTION","Allergy status re-verified against chart at time of prescribing. No contraindication to nitrofurantoin."));
+    push(4,"15:09", () => callLine("Agent","Here's the situation: the bug we grew is resistant to the antibiotic you were sent home with — the ciprofloxacin. It won't fully clear this. There's a different one that does work on it, so I'm switching you over today."));
+    push(4,"15:09", () => callLine("Patient","Oh — okay. So I stop the other one?"));
+    push(4,"15:09", () => callLine("Agent","Yes, stop the ciprofloxacin. The new one is nitrofurantoin, one capsule twice a day for five days. I'm sending it to the pharmacy nearest you now."));
+    push(4,"15:10", () => agent("ACTION","Order transmitted: <b>Nitrofurantoin 100 mg PO BID &times; 5 days</b>. Ciprofloxacin discontinued.", true));
+    push(4,"15:10", () => cbox("PHARMACY", `Order transmitted to Bayview Pharmacy, 1120 Mission St — 0.4 mi
+Status: RECEIVED   Ready ~30 min (est. 15:40)
+Prior auth: not required   Patient copay: $4.00`));
+    push(4,"15:10", () => callLine("Agent","It'll be ready in about half an hour at the pharmacy on Mission, four-tenths of a mile from you. Copay is four dollars."));
+    push(4,"15:11", () => callLine("Agent","Last thing — if you get a fever, chills, or pain in your back or side, or you start vomiting, that means it's moved up to the kidney. Call us back or go straight to an emergency department. Otherwise I'll check in with you in three days."));
+    push(4,"15:11", () => callLine("Patient","Got it, thank you."));
+    push(4,"15:11", () => agent("CALL","Call ended — 5 min 12 s. Return precautions delivered and logged. Follow-up check scheduled +3 days."));
+
+    /* ------------- STAGE 5 — CLOSE THE LOOP ------------- */
+    push(5,"+2h", () => agent("ACTION","Checking pharmacy fill status (+2 h)."));
+    push(5,"18:22", () => cbox("PHARMACY FILL CHECK", `Rx nitrofurantoin 100mg — status: PICKED UP
+✓ Prescription collected at 18:22.`));
+    push(5,"18:22", () => agent("REASONING","If uncollected, the agent re-contacts and probes the actual blocker — cost, transport, or belief that the symptoms resolved. A reminder that just says \"pick up your prescription\" fails exactly here.", true));
+    push(5,"+3d", () => agent("CALL","Follow-up contact (+3 days): \"Has the burning resolved?\""));
+    push(5,"+3d", () => cbox("SMS THREAD", `[agent]   Checking in — has the burning when you urinate gone away?
+[patient] All gone, thanks.`));
+    push(5,"+3d", () => { setFU({status:"resolved", outcome:"Therapy corrected to susceptible agent; symptoms resolved; loop closed without readmission."});
+      agent("ACTION","Follow-up item marked <b class=\"pos\">RESOLVED</b>. Encounter loop closed. Summary written back to EHR."); });
+    push(5,"+3d", () => ehrCard("Follow-up summary — closed loop", "2026-07-23",
+`<pre class="mono">2026-07-18 14:02  Contact verified (SMS)
+2026-07-18 15:10  Discharged on ciprofloxacin; culture pending
+2026-07-18 15:11  Follow-up owner assigned: Agent
+2026-07-20 15:02  Culture: ESBL E. coli, ciprofloxacin RESISTANT
+2026-07-20 15:08  Safety screen negative — no systemic features
+2026-07-20 15:10  Therapy switched: nitrofurantoin 100mg BID x5d
+2026-07-20 18:22  Prescription collected
+2026-07-23 10:15  Symptoms resolved — <span class="res-S">LOOP CLOSED</span></pre>`));
+    push(5,"+3d", () => caption("Twelve minutes of agent time replaced a result that, today, nobody reads."));
+
+  } else {
+    /* ---------- RED FLAG BRANCH ---------- */
+    push(4,"15:07", () => callLine("Agent","Any fever or chills since you left?"));
+    push(4,"15:07", () => { callLine("Patient","Yeah, actually — I was shivering last night and I felt hot."); screen("Fever / chills","Yes — subjective fever + rigors",false); });
+    push(4,"15:07", () => callLine("Agent","Any pain in your back or side, up under the ribs?"));
+    push(4,"15:07", () => { callLine("Patient","My right side, yeah. It's been aching since yesterday."); screen("Flank / back pain","Yes — right flank",false); });
+    push(4,"15:08", () => callLine("Agent","Any nausea or vomiting?"));
+    push(4,"15:08", () => { callLine("Patient","A bit queasy. Haven't thrown up."); screen("Nausea / vomiting","Nausea, no emesis",false); });
+    push(4,"15:08", () => agent("ESCALATION","<b>RED FLAGS PRESENT</b> — fever/rigors + right flank pain on ESBL <i>E. coli</i> with failed empiric therapy. Concern for <b>pyelonephritis</b>.", true));
+    push(4,"15:08", () => agent("REASONING","<b>Halting autonomous prescribing.</b> Systemic features are not a switch-an-oral-antibiotic situation — nitrofurantoin does not achieve tissue levels in the upper tract. Requires physician assessment, possible IV therapy.", true));
+    push(4,"15:08", () => callLine("Agent","Thank you — those symptoms change things. I'm not going to change your medication over the phone. I'm contacting the doctor who saw you now, and I need you to stay reachable. Do not wait on this."));
+    push(4,"15:09", () => agent("ACTION","Resolving treating physician + shift status from scheduling system."));
+    push(4,"15:09", () => cbox("PROVIDER LOOKUP", `Treating physician: Dr. Lim (ED, attending)
+Shift status:       ON SHIFT (14:00–22:00)
+Primary channel:    Microsoft Teams — health system tenant
+Fallback:           secure pager -> ED charge nurse`));
+    push(4,"15:09", () => caption("Fully autonomous — with a physician one tap away, and a HIPAA-minimized handoff."));
+
+    /* ------------- STAGE 6 — ESCALATION ------------- */
+    push(6,"15:09", () => { setFU({status:"escalated", physician_notified:true, escalated:true,
+        outcome:"Halted autonomous prescribing; escalated to treating physician for suspected pyelonephritis."});
+      agent("ESCALATION","Paging Dr. Lim via Microsoft Teams — identifiers stripped."); });
+    push(6,"15:09", () => teamsCard());
+    push(6,"15:10", () => agent("SYSTEM","Delivered 15:09. Read receipt 15:10."));
+    push(6,"15:11", () => { agent("ACTION","Dr. Lim tapped the secure link — authenticating into EHR."); openSecureRecord(); });
+    push(6,"15:11", () => { closeSecureRecord();
+      if(ackLogged) return;
+      ackLogged = true;
+      agent("ACTION","Record reviewed under authenticated session. <b>Escalation acknowledged 15:11</b> — Dr. Lim assumes care."); });
+    push(6,"15:11", () => ehrCard("Escalation log", "2026-07-20 15:11",
+`<pre class="mono">15:08  Agent halted autonomous therapy change (red flags)
+15:09  Physician located: Dr. Lim — ON SHIFT
+15:09  HIPAA-minimized page sent via Teams (no name/MRN/DOB)
+15:10  Read receipt
+15:11  Secure link opened — authenticated EHR session
+15:11  <span class="res-R">ESCALATION ACKNOWLEDGED</span> — Dr. Lim assumes care
+       Agent role: monitoring, follow-up item remains open</pre>`));
+    push(6,"15:11", () => agent("SYSTEM","Follow-up item held <b>open</b> under physician ownership. Agent continues monitoring for disposition."));
+  }
+
+  return S;
+}
+
+/* =====================================================================
+   RENDER HELPERS
+   ===================================================================== */
+
+const ehrScroll = document.getElementById('ehrScroll');
+const consoleScroll = document.getElementById('consoleScroll');
+let clock = "14:00";
+
+function scrollDown(node){ node.scrollTop = node.scrollHeight; }
+
+function ehrCard(title, stamp, bodyHTML, id){
+  const d = document.createElement('div');
+  d.className = 'card';
+  if(id) d.id = id;
+  d.innerHTML = `<div class="card-head"><span>${title}</span><span class="stamp">${stamp||''}</span></div>
+                 <div class="card-body">${bodyHTML}</div>`;
+  ehrScroll.appendChild(d); scrollDown(ehrScroll);
+  return d;
+}
+
+function caption(text){
+  const d = document.createElement('div');
+  d.className = 'caption';
+  d.textContent = text;
+  ehrScroll.appendChild(d); scrollDown(ehrScroll);
+}
+
+function transcriptLine(who, text){
+  const box = document.getElementById('txBox');
+  if(!box) return;
+  const p = document.createElement('p');
+  p.className = 'transcript-line';
+  p.innerHTML = `<span class="spk${who==='Patient'?' pt':''}">[${who}]</span> `;
+  box.appendChild(p);
+  scrollDown(ehrScroll);
+  return typeInto(p, text, 11, () => scrollDown(ehrScroll));
+}
+
+function pick(id){
+  const b = document.getElementById(id);
+  if(b) b.classList.add('picked');
+}
+
+/* --- agent console --- */
+function agent(kind, html, stream){
+  const d = document.createElement('div');
+  d.className = 'entry';
+  d.innerHTML = `<div class="ts">${clock}</div><div class="kind k-${kind}">${kind}</div><div class="msg"></div>`;
+  consoleScroll.appendChild(d); scrollDown(consoleScroll);
+  const msg = d.querySelector('.msg');
+  if(stream) return typeInto(msg, html, 7, () => scrollDown(consoleScroll));
+  msg.innerHTML = html;
+}
+
+function cbox(head, text){
+  const d = document.createElement('div');
+  d.className = 'entry';
+  d.innerHTML = `<div class="ts">${clock}</div><div class="kind k-ACTION">ACTION</div>
+    <div class="msg"><div class="cbox"><span class="hd">${head}</span>${text}</div></div>`;
+  consoleScroll.appendChild(d); scrollDown(consoleScroll);
+}
+
+let callBoxNode = null;
+function callBox(){
+  const d = document.createElement('div');
+  d.className = 'entry';
+  d.innerHTML = `<div class="ts">${clock}</div><div class="kind k-CALL">CALL</div>
+    <div class="msg"><div class="cbox" id="callTranscript"><span class="hd">LIVE CALL — ${PATIENT.phone}</span></div></div>`;
+  consoleScroll.appendChild(d);
+  callBoxNode = d.querySelector('#callTranscript');
+  scrollDown(consoleScroll);
+}
+
+function callLine(who, text){
+  if(!callBoxNode) return;
+  const p = document.createElement('div');
+  p.className = 'qa';
+  p.innerHTML = `<span class="${who==='Agent'?'':'a'}">${who==='Agent'?'agent  ':'patient'}</span>  `;
+  callBoxNode.appendChild(p);
+  scrollDown(consoleScroll);
+  return typeInto(p, text, 9, () => scrollDown(consoleScroll));
+}
+
+function screen(item, answer, ok){
+  const cls = ok === true ? 'flagok' : ok === false ? 'flagbad' : '';
+  const mark = ok === true ? '✓ not a red flag' : ok === false ? '✗ RED FLAG' : '• noted';
+  const d = document.createElement('div');
+  d.className = 'entry';
+  d.innerHTML = `<div class="ts">${clock}</div><div class="kind k-REASONING">SCREEN</div>
+    <div class="msg"><b>${item}:</b> ${answer} &nbsp;<span class="${cls}">${mark}</span></div>`;
+  consoleScroll.appendChild(d); scrollDown(consoleScroll);
+}
+
+function teamsCard(){
+  const d = document.createElement('div');
+  d.className = 'entry';
+  d.innerHTML = `<div class="ts">${clock}</div><div class="kind k-ESCALATION">ESCALATION</div>
+   <div class="msg">
+    <div class="teams">
+      <div class="teams-hd">Microsoft Teams <span class="ch">&middot; ED Attendings &middot; direct message</span></div>
+      <div class="teams-body">
+        <div class="teams-from">${APP_NAME} follow-up agent <span>15:09</span></div>
+        Follow-up on your ED patient from Sat 2pm — the music teacher, jazz trio, first-time UTI, sent home on cipro.
+        Culture is <b>ESBL, cipro-resistant</b>, and she's now reporting <b>fever + flank pain</b>. Possible pyelonephritis.
+        Please review in EHR:
+        <br><button class="teams-link" id="secureLink">Open secure record &rarr;</button>
+      </div>
+      <div class="teams-cap">Identifiers stripped — no name, no MRN, no DOB. A memorable non-identifying social detail is included because that is how clinicians actually re-recognise a patient. The actual PHI lives only behind the authenticated EHR link.</div>
+    </div></div>`;
+  consoleScroll.appendChild(d); scrollDown(consoleScroll);
+  d.querySelector('#secureLink').addEventListener('click', openSecureRecord);
+}
+
+/* --- mock authenticated EHR behind the secure link --- */
+let ackLogged = false;
+function openSecureRecord(){
+  if(document.getElementById('secureVeil')) return;
+  const link = document.getElementById('secureLink');
+  if(link) link.classList.add('tapped');
+  const veil = document.createElement('div');
+  veil.className = 'veil';
+  veil.id = 'secureVeil';
+  veil.innerHTML = `
+    <div class="secure">
+      <div class="secure-auth">
+        <span>SSO AUTHENTICATED &middot; Dr. A. Lim, ED attending</span>
+        <span>session 15:11 &middot; access logged</span>
+      </div>
+      <div class="secure-hd">
+        <div class="t">Patient record — opened from escalation link</div>
+        <div class="n">${PATIENT.name}</div>
+        <div class="d">MRN ${PATIENT.mrn} &nbsp;&middot;&nbsp; DOB ${PATIENT.dob} (${PATIENT.age}${PATIENT.sex}) &nbsp;&middot;&nbsp; ${PATIENT.phone}</div>
+        <div class="reveal">These identifiers appear <b>here only</b> — behind authentication. They were never in the Teams message.</div>
+      </div>
+      <div class="secure-body">
+        <div class="secure-sec">
+          <h4>Why you are being contacted</h4>
+          <div>ED encounter 2026-07-18, discharged 15:10 on empiric ciprofloxacin with culture pending.
+          Agent-owned follow-up. Culture returned <b>ESBL <i>E. coli</i>, ciprofloxacin resistant</b>.
+          On outbound safety call 2026-07-20 the patient reported <b>subjective fever with rigors</b> and
+          <b>right flank pain</b>, with nausea.</div>
+        </div>
+        <div class="secure-sec">
+          <h4>Agent assessment</h4>
+          <pre class="mono">Empiric therapy:     ciprofloxacin 500mg BID — <span class="res-R">INEFFECTIVE (R)</span>
+Oral agents S:       nitrofurantoin, fosfomycin
+Agent action:        <span class="res-R">HELD</span> — oral nitrofurantoin not appropriate
+                     with suspected upper-tract involvement
+Concern:             acute pyelonephritis, ESBL organism
+Suggested review:    IV vs oral carbapenem-sparing options,
+                     imaging if not improving, admission threshold</pre>
+        </div>
+        <div class="secure-sec">
+          <h4>Contact</h4>
+          <div class="mono">Patient reachable at ${PATIENT.phone} — confirmed 2026-07-20 15:08. Awaiting your decision.</div>
+        </div>
+      </div>
+      <div class="secure-foot">
+        <span class="mono" style="color:var(--ink-3);font-size:11px">Access to this record is audit-logged.</span>
+        <span class="sp"></span>
+        <button class="btn" id="secureClose">Close</button>
+        <button class="btn primary" id="secureAck">Acknowledge &amp; assume care</button>
+      </div>
+    </div>`;
+  document.body.appendChild(veil);
+  document.getElementById('secureClose').addEventListener('click', closeSecureRecord);
+  document.getElementById('secureAck').addEventListener('click', () => {
+    closeSecureRecord();
+    if(ackLogged) return;          // presenter may tap this before the script reaches it
+    ackLogged = true;
+    agent("ESCALATION","Dr. Lim acknowledged escalation in EHR at 15:11 and assumed care. Agent steps back to monitoring.");
+  });
+}
+function closeSecureRecord(){
+  const v = document.getElementById('secureVeil');
+  if(v) v.remove();
+}
+
+/* --- follow-up tracker --- */
+let FU = {...FOLLOW_UP_TEMPLATE};
+function setFU(patch){ Object.assign(FU, patch); renderFU(); }
+function renderFU(){
+  const label = {open:"OPEN", active:"ACTING", resolved:"RESOLVED", escalated:"ESCALATED"}[FU.status];
+  document.getElementById('tracker').innerHTML = `
+    <div class="tracker-row"><span>follow_up_item.category</span><b>${FU.category}</b></div>
+    <div class="tracker-row"><span>status</span><span class="st ${FU.status}">${label}</span></div>
+    <div class="tracker-row"><span>physician_notified</span><b>${FU.physician_notified}</b></div>
+    <div class="tracker-row"><span>escalated</span><b>${FU.escalated}</b></div>
+    <div class="tracker-row"><span>outcome</span><b>${FU.outcome ? FU.outcome : "—"}</b></div>`;
+}
+
+/* --- typewriter --- */
+let skip = false;
+function typeInto(node, html, speed, onTick){
+  return new Promise(res => {
+    const span = document.createElement('span');
+    node.appendChild(span);
+    const cur = document.createElement('span');
+    cur.className = 'cursor';
+    node.appendChild(cur);
+    // strip tags for typing, then swap in real HTML at the end
+    const plain = html.replace(/<[^>]+>/g,'').replace(/&nbsp;/g,' ').replace(/&rarr;/g,'->')
+                      .replace(/&check;/g,'✓').replace(/&times;/g,'x').replace(/&middot;/g,'-')
+                      .replace(/&amp;/g,'&').replace(/&lt;/g,'<').replace(/&gt;/g,'>');
+    let i = 0;
+    const tick = () => {
+      if(skip){ finish(); return; }
+      i += 1;
+      span.textContent = plain.slice(0, i);
+      if(onTick) onTick();
+      if(i >= plain.length){ finish(); return; }
+      setTimeout(tick, speed);
+    };
+    const finish = () => {
+      cur.remove();
+      span.outerHTML = html;
+      if(onTick) onTick();
+      res();
+    };
+    tick();
+  });
+}
+
+/* =====================================================================
+   PLAYBACK ENGINE
+   ===================================================================== */
+
+let script = [], idx = 0, playing = false, busy = false, redFlag = false;
+
+const btnPlay = document.getElementById('btnPlay');
+const btnNext = document.getElementById('btnNext');
+const btnReset = document.getElementById('btnReset');
+const rfToggle = document.getElementById('redFlagToggle');
+
+function delayFor(step){
+  // realistic pacing: 600–1500ms
+  return 600 + Math.floor(Math.random()*900);
+}
+
+async function stepOnce(){
+  if(idx >= script.length){ playing = false; syncButtons(); return false; }
+  busy = true;
+  const s = script[idx++];
+  clock = s.t;
+  const r = s.run();
+  if(r && r.then) await r;
+  busy = false;
+  renderRail();
+  syncButtons();
+  return true;
+}
+
+async function play(){
+  if(playing){ playing = false; syncButtons(); return; }
+  playing = true; syncButtons();
+  while(playing && idx < script.length){
+    const ok = await stepOnce();
+    if(!ok) break;
+    if(!playing) break;
+    await new Promise(r => setTimeout(r, delayFor()));
+  }
+  playing = false; syncButtons();
+}
+
+async function next(){
+  if(busy){ skip = true; setTimeout(()=>{skip=false;}, 30); return; }
+  playing = false;
+  await stepOnce();
+}
+
+function syncButtons(){
+  const done = idx >= script.length;
+  btnPlay.textContent = playing ? "Pause" : (done ? "Replay" : (idx===0 ? "Play demo" : "Resume"));
+  btnNext.disabled = done;
+  document.getElementById('footRight').textContent =
+    `step ${Math.min(idx,script.length)}/${script.length}` + (redFlag ? "  ·  RED-FLAG BRANCH" : "");
+}
+
+/* --- timeline rail --- */
+function currentStage(){
+  if(idx === 0) return 0;
+  return script[Math.min(idx,script.length)-1].stage;
+}
+function renderRail(){
+  const cur = currentStage();
+  const seen = new Set(script.slice(0, idx).map(s => s.stage));
+  const inScript = new Set(script.map(s => s.stage));
+  document.getElementById('rail').innerHTML = STAGES.map(st => {
+    let cls = 'stage' + (st.esc ? ' esc' : '');
+    if(!inScript.has(st.id)) cls += ' skipped';
+    else if(st.id === cur && idx > 0) cls += ' now';
+    else if(seen.has(st.id)) cls += ' done';
+    const label = (!inScript.has(st.id) && st.esc) ? st.label + " (what-if)"
+                : (!inScript.has(st.id)) ? st.label + " (n/a)" : st.label;
+    return `<div class="${cls}"><div class="bar"></div>
+      <div class="lbl"><span class="num">${st.id}</span>${label}</div></div>`;
+  }).join('');
+}
+
+/* --- reset --- */
+function reset(){
+  playing = false; busy = false; skip = false; idx = 0;
+  ehrScroll.innerHTML = ''; consoleScroll.innerHTML = '';
+  closeSecureRecord();
+  ackLogged = false;
+  callBoxNode = null; clock = "14:00";
+  FU = {...FOLLOW_UP_TEMPLATE};
+  renderFU();
+  script = buildScript(redFlag);
+  agent("SYSTEM", `${APP_NAME} attached to ED encounter. Awaiting triage.`);
+  idx = 0;
+  renderRail(); syncButtons();
+}
+
+/* --- init --- */
+function initBanner(){
+  document.getElementById('brandName').innerHTML = `${APP_NAME}<span>ED follow-up agent</span>`;
+  document.getElementById('ptName').textContent = PATIENT.name;
+  document.getElementById('ptDemo').textContent =
+    `MRN ${PATIENT.mrn}  ·  DOB ${PATIENT.dob} (${PATIENT.age}${PATIENT.sex})  ·  ${PATIENT.phone}  ·  ${PATIENT.language}`;
+  document.getElementById('ptTags').innerHTML = `
+    <span class="tag ok">Allergies: ${PATIENT.allergies}</span>
+    <span class="tag flag">No PCP on file</span>
+    <span class="tag">${PATIENT.occupation}</span>`;
+}
+
+btnPlay.addEventListener('click', play);
+btnNext.addEventListener('click', next);
+btnReset.addEventListener('click', reset);
+rfToggle.addEventListener('click', () => {
+  redFlag = !redFlag;
+  rfToggle.classList.toggle('on', redFlag);
+  reset();
+});
+document.addEventListener('keydown', e => {
+  if(e.code === 'Escape'){ closeSecureRecord(); return; }
+  if(e.code === 'Space'){ e.preventDefault(); play(); }
+  if(e.code === 'ArrowRight'){ e.preventDefault(); next(); }
+});
+
+initBanner();
+reset();
+</script>
+</body>
+</html>
