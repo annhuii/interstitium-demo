@@ -109,6 +109,34 @@ def cases() -> List[Tuple[str, Encounter, Signal, Knowledge, datetime]]:
             LATER,
         ),
         (
+            "culture overdue, cause unknown -> agent interrogates the lab",
+            _encounter(),
+            Signal("result_overdue", LATER, {"order": "urine culture", "overdue_by": "26h"}),
+            Knowledge(),
+            LATER,
+        ),
+        (
+            "culture overdue: resulted in LIS but never delivered -> interface failure",
+            _encounter(),
+            Signal("result_overdue", LATER, {"order": "urine culture", "overdue_by": "26h"}),
+            Knowledge({"specimen_status": "resulted", "result_available_in_lis": True}),
+            LATER,
+        ),
+        (
+            "culture overdue: specimen never reached the lab -> recollection",
+            _encounter(),
+            Signal("result_overdue", LATER, {"order": "urine culture", "overdue_by": "26h"}),
+            Knowledge({"specimen_status": "never_received", "result_available_in_lis": False}),
+            LATER,
+        ),
+        (
+            "a signal nobody modelled -> owned by a human, never dropped",
+            _encounter(),
+            Signal("pathology_addendum", LATER),
+            Knowledge(),
+            LATER,
+        ),
+        (
             "low-risk discharge, nothing pending -> closed at intake",
             _encounter(
                 patient=_with_pcp(),

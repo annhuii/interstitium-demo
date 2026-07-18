@@ -52,6 +52,8 @@ def context_for(workflow, knowledge=None, **enc_kw):
         "radiology_report_changed": ("report_amended", {}),
         "post_discharge_symptom_check": ("symptom_check_due", {"day": 3}),
         "discharge_open_loop_screen": ("discharge", {}),
+        "result_never_returned": ("result_overdue", {"order": "urine culture", "overdue_by": "26h"}),
+        "unclassified_open_loop": ("an_unmodelled_signal_type", {}),
     }
     kind, payload = payloads[workflow.category]
     return Context(
@@ -167,4 +169,6 @@ def _plausible(fact: str):
         "final_read": "no acute abnormality",
         "trajectory": "resolved",
         "pending_results_confirmed": True,
+        "specimen_status": "in_progress",
+        "result_available_in_lis": False,
     }[fact]

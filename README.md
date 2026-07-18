@@ -7,27 +7,89 @@ still pending. Two days later the culture returns: the organism is resistant to
 the drug she went home with. She has no PCP. The result lands in a queue nobody
 owns, and she finishes a course of an antibiotic that was never going to work.
 
-This repo is the decision engine for an agent that owns that loop — and, more
-importantly, that knows when **not** to act on it.
+That is one loop. The same thing happens to an amended radiology report, a
+high-risk patient who leaves against advice, a symptom that never resolved, and —
+worst of all — a specimen that never reached the laboratory, which produces no
+result for anyone to miss.
+
+This repo is the runtime for an agent that owns those loops: that screens **every**
+discharge for them, that cannot drop one it does not recognise, and that knows
+when **not** to act.
 
 ```
 pip install -e ".[dev]"
-python -m interstitium --registry   # route signals across all five workflows
+python -m interstitium --registry   # route signals across every workflow
 python -m interstitium              # the urine-culture loop in detail
-pytest                              # 79 tests
+pytest                              # 105 tests
 ```
 
-## Five workflows, one runtime
+## This is not a set of condition-specific bots
 
-A post-discharge loop is not one shape. These are three:
+The unit of work is not a diagnosis. It is **an unresolved item at discharge** —
+and every discharged patient is screened for those, not just the ones matching a
+condition someone thought to write a workflow for.
+
+Three things make that a property of the code rather than a claim in a readme:
+
+1. **Intake runs on every discharge.** `discharge_open_loop_screen` asks one
+   condition-agnostic question: does this encounter leave anything unresolved
+   that nobody owns? Pending results, empiric therapy started, no downstream
+   owner, left AMA. An ankle sprain with nothing pending is *closed* — which is
+   itself a decision, gated on facts, not a silent skip.
+
+2. **No signal is ever unowned.** `route` sends anything the specialists do not
+   claim to `UnclassifiedLoopWorkflow`, which has no clinical opinion and cannot
+   act — it can only attach a human owner. A pathology addendum, a device alert,
+   a service integrated last week: none of them vanish. The unmodelled case
+   degrades to a person rather than to silence. `test_no_signal_is_ever_unowned`
+   is the assertion.
+
+3. **Absence of a signal is itself a signal.** See below.
+
+The specialised workflows are how a loop gets *closed* well. The runtime is what
+guarantees every loop is *seen*.
 
 | trigger | workflow | what makes it different |
 |---|---|---|
-| discharge event | `discharge_open_loop_screen` | screens *every* discharge — decides whether any loop exists at all |
+| discharge event | `discharge_open_loop_screen` | screens **every** discharge — decides whether any loop exists at all |
 | discharge event | `high_risk_ama` | clock runs in **hours**; escalation target may be EMS, not a chat message |
 | result event | `pending_culture_empiric_therapy` | the reference case, fully worked out |
 | result event | `radiology_report_changed` | triggered by a **diff** between reads, not a value; closed clinician-to-clinician |
-| elapsed time | `post_discharge_symptom_check` | no external event at all — just "is the trajectory what we expected" |
+| **non**-event | `result_never_returned` | fires when an expected result *fails* to arrive |
+| elapsed time | `post_discharge_symptom_check` | no external event at all — "is the trajectory what we expected" |
+| anything else | `unclassified_open_loop` | owner of last resort; escalates, never acts |
+
+## The result that never came back
+
+Every other workflow is triggered by something happening. This one is triggered
+by something **not** happening — the expected turnaround elapsed and no result
+ever arrived.
+
+That inverts the failure mode. A resistant culture at least produces a result
+somebody could in principle read. A specimen that never reached the lab produces
+nothing: no queue holds it, no inbox displays it, and there is nothing for a
+human to miss noticing. It is invisible rather than merely unnoticed.
+
+"No result" has several causes with opposite correct responses, and they are not
+distinguishable without asking the laboratory:
+
+| what the lab says | what it actually means | response |
+|---|---|---|
+| never received / lost in transit | no result is ever coming | recollect — patient must return |
+| rejected (haemolysed, insufficient) | someone was told, nobody acted | recollect + notify ordering clinician |
+| **resulted, but not delivered** | the answer exists in the LIS and never reached the chart | attach it, raise the interface fault |
+| still in progress | genuinely not ready | monitor, keep the loop open |
+| anything unrecognised | unknown is not benign | escalate |
+
+The third row is the one worth pointing at. The laboratory believes it did its
+job, the ordering system shows nothing pending, and the result is sitting in a
+system nobody is looking at. Treating "no result in the chart" as "no result
+produced" is how that gets buried permanently.
+
+Note also that this workflow's facts come from the **laboratory**, not the
+patient (`fact_source = FactSource.LABORATORY`), so an unreachable patient does
+not block the diagnosis. Getting that wrong would have the runtime refuse to
+query a lab for want of a phone number it never needed.
 
 A workflow declares three things: when it fires, what it must know before it may
 act, and how it decides. Everything else is enforced by `runtime.py` for all of
@@ -73,10 +135,14 @@ yet. One of them drops each required fact in turn and asserts that
 complete-minus-one is never treated as complete.
 
 **Honest scope:** only the urine-culture workflow has real clinical depth
-(`policy.py`, `formulary.py`). The other four are thin — enough to prove the
-interface holds under genuinely different shapes, not enough to run. That is
-deliberate: five half-built workflows would prove less than two real ones and an
-architecture that takes the rest.
+(`policy.py`, `formulary.py`). The others are thin — enough to prove the
+interface holds under genuinely different trigger shapes, not enough to run on a
+patient. That is deliberate: several half-built workflows would prove less than
+one real one plus an architecture that demonstrably takes the rest.
+
+What is *not* thin is the guarantee that no loop goes unowned. That holds
+regardless of how many workflows exist, which is what makes this applicable to a
+whole department rather than to the conditions someone got round to modelling.
 
 ## The workflow this changes
 
@@ -137,7 +203,7 @@ deliberate: it is how a clinician who saw thirty patients that shift actually
 re-recognises this one, and it identifies her to *him* without identifying her to
 anyone else. The actual PHI lives behind the authenticated link.
 
-## Five bugs the tests caught
+## Six bugs the tests caught
 
 Worth recording, because each one is the kind that survives a demo:
 
@@ -162,7 +228,12 @@ Worth recording, because each one is the kind that survives a demo:
    never surfacing. Safe on every individual call and a silent failure over time.
    The gather-window check now runs *before* the always-permitted shortcut.
 
-5. **Unknown treated as a value, three times over.** Two unretrieved radiology
+5. **A signal nobody modelled was silently dropped.** `route` returned an empty
+   list for an unrecognised signal type, so it disappeared with no owner and no
+   trace -- the exact failure mode the product exists to prevent, reproduced
+   inside the product. Now every signal routes to a fallback that escalates.
+
+6. **Unknown treated as a value, three times over.** Two unretrieved radiology
    reads compared equal and proposed closing the loop; an unasked AMA patient was
    described to a clinician as having "declined to return"; an unanswered symptom
    check reported "symptoms persist". The runtime blocked the unsafe *actions*,
@@ -173,14 +244,14 @@ Worth recording, because each one is the kind that survives a demo:
 ```
 src/interstitium/
   runtime.py     Workflow protocol, the guards, routing -- the general layer
-  workflows/     the five: intake, ama, culture, radiology, symptoms
+  workflows/     intake, ama, culture, lab_integrity, radiology, symptoms, fallback
   models.py      encounter objects; SymptomScreen defaults to worst case
   formulary.py   agent site-eligibility, local antibiogram, pharmacy stock
   policy.py      UTI clinical gates: switch therapy, or escalate
   phi.py         escalation message builder + identifier scan
   engine.py      the culture loop's narrated trace (what the demo UI renders)
   scenarios.py   the demo encounter, as data
-tests/           79 tests; registry-wide invariants in test_registry_invariants.py
+tests/           105 tests; registry-wide invariants in test_registry_invariants.py
 demo/index.html  the pitch UI
 ```
 

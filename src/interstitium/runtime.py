@@ -158,6 +158,20 @@ class Decision:
         )
 
 
+class FactSource(str, Enum):
+    """Where a workflow's missing facts have to come from.
+
+    Not everything is established by phoning the patient. A lab integrity check
+    interrogates the laboratory system; a report diff reads the RIS. Getting this
+    wrong means the runtime blocks a workflow for lacking a phone number it never
+    needed.
+    """
+
+    PATIENT = "patient"
+    LABORATORY = "laboratory"
+    RECORD_SYSTEM = "record_system"
+
+
 class Workflow(ABC):
     """One kind of open loop. Supplies its own gates; inherits the guards."""
 
@@ -167,6 +181,13 @@ class Workflow(ABC):
     #: Whether closing this loop involves speaking with the patient. If so, an
     #: unverified contact point is disqualifying.
     needs_patient_contact: bool = True
+
+    #: Where this workflow gets what it does not know.
+    fact_source: FactSource = FactSource.PATIENT
+
+    #: A fallback owns signals no specialised workflow claims. Exactly one
+    #: should be registered; see `route`.
+    is_fallback: bool = False
 
     #: How long the workflow may spend trying to establish its facts before it
     #: must hand off. None means no deadline.
@@ -241,7 +262,10 @@ def evaluate(workflow: Workflow, ctx: Context) -> Decision:
 
     if missing and decision.is_autonomous:
         note = "cannot act autonomously: {} not established".format(", ".join(missing))
-        if not reachable:
+
+        # Only patient-sourced facts are blocked by an unreachable patient. A lab
+        # integrity check does not need a phone number to query the laboratory.
+        if workflow.fact_source is FactSource.PATIENT and not reachable:
             return Decision(
                 Disposition.ESCALATE_CLINICIAN,
                 decision.reasons + [note, "handing off: no verified contact point"],
@@ -251,7 +275,9 @@ def evaluate(workflow: Workflow, ctx: Context) -> Decision:
         return Decision(
             Disposition.GATHER_FACTS,
             decision.reasons + [note],
-            action="contact patient to establish: {}".format(", ".join(missing)),
+            action="query {} to establish: {}".format(
+                workflow.fact_source.value, ", ".join(missing)
+            ),
             urgency=decision.urgency,
         )
 
@@ -294,7 +320,19 @@ class Outcome:
 def route(
     encounter: Encounter, signal: Signal, registry: Sequence[Workflow]
 ) -> List[Workflow]:
-    return [w for w in registry if w.triggered_by(encounter, signal)]
+    """Every signal gets an owner. Specialists first, fallback if none claim it.
+
+    The alternative -- returning an empty list -- means an unrecognised signal is
+    silently dropped, which is the failure this whole system exists to prevent.
+    A loop nobody owns is exactly as dangerous whether it went unowned because no
+    human noticed it or because no workflow matched it.
+    """
+    specialists = [
+        w for w in registry if not w.is_fallback and w.triggered_by(encounter, signal)
+    ]
+    if specialists:
+        return specialists
+    return [w for w in registry if w.is_fallback and w.triggered_by(encounter, signal)]
 
 
 def handle(

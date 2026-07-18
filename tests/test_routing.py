@@ -71,8 +71,35 @@ def test_low_risk_discharge_with_no_open_loops_closes_immediately():
     assert [o.decision.disposition for o in outcomes] == [Disposition.CLOSE_LOOP]
 
 
-def test_unrecognised_signal_matches_nothing_rather_than_guessing():
-    assert route(enc(), Signal("lab_addendum_v2", NOW), REGISTRY) == []
+@pytest.mark.parametrize(
+    "kind",
+    [
+        "lab_addendum_v2",
+        "pathology_resulted",
+        "device_telemetry_alert",
+        "specialist_letter_received",
+        "",
+    ],
+)
+def test_no_signal_is_ever_unowned(kind):
+    """The property that makes this apply to every patient rather than to five
+    conditions: a signal nobody modelled degrades to a human owner, not to
+    silence."""
+    matched = route(enc(), Signal(kind, NOW), REGISTRY)
+    assert matched, "signal {!r} was dropped".format(kind)
+    assert {w.category for w in matched} == {"unclassified_open_loop"}
+
+
+def test_the_fallback_never_acts_on_its_own():
+    """It has no clinical policy, so it may only escalate."""
+    outcomes = handle(enc(), Signal("device_telemetry_alert", NOW), REGISTRY, Knowledge(), now=NOW)
+    assert [o.decision.disposition for o in outcomes] == [Disposition.ESCALATE_CLINICIAN]
+
+
+def test_a_claimed_signal_does_not_also_hit_the_fallback():
+    """Specialists suppress the fallback -- no duplicate ownership."""
+    matched = route(enc(), Signal("symptom_check_due", NOW), REGISTRY)
+    assert {w.category for w in matched} == {"post_discharge_symptom_check"}
 
 
 def test_monitoring_cannot_continue_indefinitely():
