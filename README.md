@@ -257,6 +257,64 @@ tests/           105 tests; registry-wide invariants in test_registry_invariants
 docs/index.html  the pitch UI (served at the Pages link above)
 ```
 
+## Regulatory posture
+
+Most of this is solvable with known patterns. Naming them matters more than
+having solved them, because the failure mode for a project like this is not
+"the regulation is impossible" — it is "nobody thought about it until after the
+architecture was fixed."
+
+**Is this a medical device?** Autonomous antibiotic-switching invites FDA
+Clinical Decision Support scrutiny, and the design answers it structurally
+rather than rhetorically. The agent operates under a named physician's standing
+authorization — captured at discharge, when they assign follow-up ownership. It
+escalates anything systemic to a human. Every action is logged with a timestamp
+and a reason. The intended position is a workflow tool executing a physician's
+plan, not an autonomous diagnostician.
+
+The honest qualifier: standing authorization does not by itself keep software
+outside device regulation. The Cures Act CDS exemption generally contemplates a
+clinician who can independently review the basis for a recommendation *before*
+it takes effect — software that acts without that review sits outside it. The
+defensible configuration is therefore **agent recommends, physician approves**
+for any therapy change, with full autonomy reserved for the surrounding work:
+contacting patients, chasing results, diagnosing why a result never arrived,
+and preparing the decision. This is why `[Both]` is the safe default at
+discharge and `[Agent]` is the demo setting. The escalation branch is not a
+safety feature bolted on — it is the part that defines the regulatory envelope.
+
+**HIPAA across settings** — ED, pharmacy, patient's phone, Teams. Each hop is a
+known quantity: BAAs with every vendor, PHI encrypted in transit and at rest,
+and above all the **minimum-necessary** principle. The physician page
+demonstrates that principle literally rather than claiming it: no name, no MRN,
+no DOB, no phone number in the message, with real PHI reachable only behind the
+authenticated EHR link. `phi.compose` refuses to emit a message that fails its
+own scan, so minimum-necessary is enforced at send time by code, not by policy
+documentation. That is a deliberate design choice and worth saying out loud.
+
+**Outbound patient contact (TCPA).** Automated calls and texts need the
+patient's prior express consent, and the triage step is where it is captured —
+the same step that verifies reachability. Two qualifiers worth being straight
+about: verifying that a number receives a message is not the same act as
+obtaining consent to be contacted by an automated system, so the consent has to
+be captured explicitly rather than inferred from delivery; and while
+treatment-related healthcare messages have narrower TCPA exposure than
+marketing, "narrower" is not "none."
+
+**Prescribing authority.** The therapy change rides on the treating physician's
+authority and licence, not the agent's. The closest existing analogue is a nurse
+executing a callback protocol under standing orders — though that is an analogy
+about *shape*, not a legal equivalence, since standing-order authority is
+state-specific and attaches to a licensed human. The load-bearing requirement is
+that a licensed prescriber remains the issuer of record for every prescription,
+with the agent preparing and transmitting rather than authorising.
+
+**Where this argument is weakest**, said plainly so it does not have to be
+discovered in Q&A: the moment the agent transmits a prescription without a
+human reviewing that specific decision is the most exposed point in the whole
+design. Everything else here — owning results, chasing labs, screening, paging
+a physician, closing loops — is materially easier to defend.
+
 ## Scope
 
 Synthetic patient, no real PHI, not a medical device. Susceptibility data,
